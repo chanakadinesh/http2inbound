@@ -18,9 +18,7 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
 
     private static final Log log = LogFactory.getLog(InboundHttp2Endpoint.class);
 
-    static final boolean SSL = System.getProperty("ssl") != null;
-
-    static final int PORT = Integer.parseInt(System.getProperty("port", SSL? "8443" : "8888"));
+    private static final int PORT = 8888;
 
     /**
      * Constructor

@@ -37,6 +37,7 @@ import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.core.axis2.MessageContextCreatorForAxis2;
 import org.apache.synapse.inbound.InboundEndpoint;
+import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.mediators.MediatorFaultHandler;
 import org.apache.synapse.mediators.base.SequenceMediator;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
@@ -49,8 +50,8 @@ import java.io.InputStream;
 @Sharable
 public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
 
-    static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Response from Http2 Inbound", CharsetUtil
-            .UTF_8));
+    private InboundHttp2ResponseSender responseSender;
+    private ChannelHandlerContext channelCtx;
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
@@ -61,7 +62,6 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-
         if (msg instanceof Http2HeadersFrame) {
             onHeadersRead(ctx, (Http2HeadersFrame) msg);
         } else if (msg instanceof Http2DataFrame) {
@@ -71,6 +71,12 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         }
     }
 
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        this.channelCtx = ctx;
+        this.responseSender = new InboundHttp2ResponseSender(this);
+    }
+
     /**
      * If receive a frame with end-of-stream set, send a pre-canned response.
      */
@@ -78,6 +84,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         String endpointName = "Http2Inbound";
         String contentType = "text/xml";
         if (data.isEndStream()) {
+            System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^Object Instance : " + this.hashCode());
             System.out.println("RequestPayload : " + new String(ByteBufUtil.getBytes(data.content())));
 
 
@@ -140,7 +147,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         SequenceMediator faultSequence = getFaultSequence(synCtx, endpoint);
         MediatorFaultHandler mediatorFaultHandler = new MediatorFaultHandler(faultSequence);
         synCtx.pushFaultHandler(mediatorFaultHandler);
-        System.out.println("injecting message to sequence : " + endpoint.getInjectingSeq());
+        System.out.println("+++++++ injecting message to sequence : " + endpoint.getInjectingSeq());
         synCtx.setProperty("inbound.endpoint.name", endpoint.getName());
         synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
     }
@@ -162,32 +169,35 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
      */
     public void onHeadersRead(ChannelHandlerContext ctx, Http2HeadersFrame headers)
             throws Exception {
-        System.out.println("RequestHeaders" + headers.toString());
+        System.out.println("+++++++++ RequestHeaders " + headers.toString());
     }
 
-    /**
-     * Sends a "Hello World" DATA frame to the client.
-     */
-    private void sendResponse(ChannelHandlerContext ctx, ByteBuf payload) {
+    public void sendResponse(MessageContext msgCtx) {
+        ByteBuf content = this.getChannelCtx().alloc().buffer();
+        content.writeBytes(msgCtx.getEnvelope().toString().getBytes());
         // Send a frame for the response status
         Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
-        ctx.write(new DefaultHttp2HeadersFrame(headers));
-        ctx.writeAndFlush(new DefaultHttp2DataFrame(payload, true));
+        this.getChannelCtx().write(new DefaultHttp2HeadersFrame(headers));
+        this.getChannelCtx().writeAndFlush(new DefaultHttp2DataFrame(content, true));
     }
 
     private org.apache.synapse.MessageContext getSynapseMessageContext(String tenantDomain) throws AxisFault {
         MessageContext synCtx = createSynapseMessageContext(tenantDomain);
         synCtx.setProperty(SynapseConstants.IS_INBOUND, true);
         ((Axis2MessageContext)synCtx).getAxis2MessageContext().setProperty(SynapseConstants.IS_INBOUND, true);
+        synCtx.setProperty(InboundEndpointConstants.INBOUND_ENDPOINT_RESPONSE_WORKER, responseSender);
+        ((Axis2MessageContext)synCtx).getAxis2MessageContext()
+                .setProperty(InboundEndpointConstants.INBOUND_ENDPOINT_RESPONSE_WORKER, responseSender);
         return synCtx;
     }
 
-    private static org.apache.synapse.MessageContext createSynapseMessageContext(String tenantDomain) throws AxisFault {
+    private org.apache.synapse.MessageContext createSynapseMessageContext(String tenantDomain) throws AxisFault {
         org.apache.axis2.context.MessageContext axis2MsgCtx = createAxis2MessageContext();
         ServiceContext svcCtx = new ServiceContext();
         OperationContext opCtx = new OperationContext(new InOutAxisOperation(), svcCtx);
         axis2MsgCtx.setServiceContext(svcCtx);
         axis2MsgCtx.setOperationContext(opCtx);
+
         if (!tenantDomain.equals(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)) {
             ConfigurationContext tenantConfigCtx =
                     TenantAxisUtils.getTenantConfigurationContext(tenantDomain,
@@ -211,4 +221,13 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
                                                     .getServerConfigContext());
         return axis2MsgCtx;
     }
+
+    public InboundHttp2ResponseSender getResponseSender() {
+        return responseSender;
+    }
+
+    public ChannelHandlerContext getChannelCtx() {
+        return channelCtx;
+    }
+
 }

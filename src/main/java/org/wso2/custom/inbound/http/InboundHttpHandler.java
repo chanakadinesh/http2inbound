@@ -1,4 +1,4 @@
-package org.wso2.custom.inbound;
+package org.wso2.custom.inbound.http;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;

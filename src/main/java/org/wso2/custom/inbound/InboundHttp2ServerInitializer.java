@@ -30,9 +30,12 @@ import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2MultiplexCodec;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.util.AsciiString;
+import org.wso2.custom.inbound.http.InboundHttpHandler;
 
 public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChannel> {
 
@@ -80,7 +83,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
     }
 
     /**
-     * Configure the pipeline for a cleartext upgrade from HTTP to HTTP/2.0
+     * Configure the pipeline for a clear text upgrade from HTTP to HTTP/2.0
      */
     private void configureClearText(SocketChannel ch) {
         final ChannelPipeline p = ch.pipeline();
@@ -98,10 +101,10 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
                 pipeline.addAfter(thisCtx.name(), null, new InboundHttpHandler("Directly talking: " + msg
                         .protocolVersion()));
                 pipeline.replace(this, null, new HttpObjectAggregator(maxHttpContentLength));
+                pipeline.addLast(new LoggingHandler(LogLevel.INFO));
                 ctx.fireChannelRead(msg);
             }
         });
-
         p.addLast(new UserEventLogger());
     }
 
