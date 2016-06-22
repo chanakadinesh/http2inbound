@@ -52,9 +52,10 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
 
                     ch.closeFuture().sync();
                 } catch (InterruptedException e) {
-                    log.error("Closing Http2 Inbound...");
+                    log.error("Closing Http2 Inbound on Port : " + PORT);
                 } finally {
                     group.shutdownGracefully();
+                    log.info("Http2 Inbound Stopped on Port : " + PORT);
                 }
             }
         });

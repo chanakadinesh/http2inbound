@@ -26,7 +26,7 @@ public class InboundHttp2HttpHandler extends ApplicationProtocolNegotiationHandl
         if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
             ctx.pipeline().addLast(new HttpServerCodec(),
                                    new HttpObjectAggregator(MAX_CONTENT_LENGTH),
-                                   new InboundHttpHandler("ALPN Negotiation"));
+                                   new InboundHttpHandler());
             return;
         }
 

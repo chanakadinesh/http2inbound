@@ -25,11 +25,9 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 public class InboundHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
-    private final String establishApproach;
     static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Hello World", CharsetUtil.UTF_8));
 
-    public InboundHttpHandler(String establishApproach) {
-        this.establishApproach = checkNotNull(establishApproach, "establishApproach");
+    public InboundHttpHandler() {
     }
 
     @Override
@@ -43,7 +41,7 @@ public class InboundHttpHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
         ByteBuf content = ctx.alloc().buffer();
         content.writeBytes(RESPONSE_BYTES.duplicate());
-        ByteBufUtil.writeAscii(content, " - via " + req.protocolVersion() + " (" + establishApproach + ")");
+        ByteBufUtil.writeAscii(content, " - via " + req.protocolVersion());
 
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK, content);
         response.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");

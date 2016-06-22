@@ -98,8 +98,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
                 System.err.println("Directly talking: " + msg.protocolVersion() + " (no upgrade was attempted)");
                 ChannelPipeline pipeline = ctx.pipeline();
                 ChannelHandlerContext thisCtx = pipeline.context(this);
-                pipeline.addAfter(thisCtx.name(), null, new InboundHttpHandler("Directly talking: " + msg
-                        .protocolVersion()));
+                pipeline.addAfter(thisCtx.name(), null, new InboundHttpHandler());
                 pipeline.replace(this, null, new HttpObjectAggregator(maxHttpContentLength));
                 pipeline.addLast(new LoggingHandler(LogLevel.INFO));
                 ctx.fireChannelRead(msg);
