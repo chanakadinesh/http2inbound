@@ -3,6 +3,7 @@ package org.wso2.custom.inbound;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelDuplexHandler;
@@ -32,6 +33,7 @@ import org.apache.axis2.context.ServiceContext;
 import org.apache.axis2.description.InOutAxisOperation;
 import org.apache.axis2.transport.TransportUtils;
 import org.apache.commons.io.input.AutoCloseInputStream;
+import org.apache.http.protocol.HTTP;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -40,18 +42,29 @@ import org.apache.synapse.inbound.InboundEndpoint;
 import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.mediators.MediatorFaultHandler;
 import org.apache.synapse.mediators.base.SequenceMediator;
+import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
 import org.wso2.carbon.inbound.endpoint.osgi.service.ServiceReferenceHolder;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 @Sharable
 public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
 
     private InboundHttp2ResponseSender responseSender;
     private ChannelHandlerContext channelCtx;
+    private Map<String, String> headerMap
+            = new TreeMap<String, String>(new Comparator<String>() {
+        public int compare(String o1, String o2) {
+            return o1.compareToIgnoreCase(o2);
+        }
+    });
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
@@ -112,11 +125,11 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
                     builder = BuilderUtil.getBuilderFromSelector(type, axis2MsgCtx);
                 } catch (AxisFault axisFault) {
                     System.out.println("Error while creating message builder :: "
-                              + axisFault.getMessage());
+                                       + axisFault.getMessage());
                 }
                 if (builder == null) {
                     System.out.println("No message builder found for type '" + type
-                                  + "'. Falling back to SOAP.");
+                                       + "'. Falling back to SOAP.");
                     builder = new SOAPBuilder();
                 }
             }
@@ -137,6 +150,10 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
 
     private void injectToSequence(org.apache.synapse.MessageContext synCtx,
                                   InboundEndpoint endpoint) {
+
+        ((Axis2MessageContext) synCtx).getAxis2MessageContext().setProperty(org.apache.axis2.context.MessageContext
+                                                                                    .TRANSPORT_HEADERS, headerMap);
+
         SequenceMediator injectingSequence = null;
         if (endpoint.getInjectingSeq() != null) {
             injectingSequence = (SequenceMediator) synCtx.getSequence(endpoint.getInjectingSeq());
@@ -169,7 +186,17 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
      */
     public void onHeadersRead(ChannelHandlerContext ctx, Http2HeadersFrame headers)
             throws Exception {
-        System.out.println("+++++++++ RequestHeaders " + headers.toString());
+        if (headers.headers().contains("http2-settings")) {
+            System.out.println("+++++++++ Settings Frame Headers " + headers.headers().toString());
+            return;
+        }
+        Set<CharSequence> headerSet = headers.headers().names();
+        for (CharSequence header : headerSet) {
+            System.out.println("+++++++++ Header " + header + " : " + headers.headers().get(header));
+            if (header.charAt(0) != ':') {
+                headerMap.put(header.toString(), headers.headers().get(header).toString());
+            }
+        }
     }
 
     public void sendResponse(MessageContext msgCtx) {
@@ -184,9 +211,9 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
     private org.apache.synapse.MessageContext getSynapseMessageContext(String tenantDomain) throws AxisFault {
         MessageContext synCtx = createSynapseMessageContext(tenantDomain);
         synCtx.setProperty(SynapseConstants.IS_INBOUND, true);
-        ((Axis2MessageContext)synCtx).getAxis2MessageContext().setProperty(SynapseConstants.IS_INBOUND, true);
+        ((Axis2MessageContext) synCtx).getAxis2MessageContext().setProperty(SynapseConstants.IS_INBOUND, true);
         synCtx.setProperty(InboundEndpointConstants.INBOUND_ENDPOINT_RESPONSE_WORKER, responseSender);
-        ((Axis2MessageContext)synCtx).getAxis2MessageContext()
+        ((Axis2MessageContext) synCtx).getAxis2MessageContext()
                 .setProperty(InboundEndpointConstants.INBOUND_ENDPOINT_RESPONSE_WORKER, responseSender);
         return synCtx;
     }
