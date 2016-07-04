@@ -29,13 +29,24 @@ import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2MultiplexCodec;
+import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ApplicationProtocolNames;
+import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.ssl.SupportedCipherSuiteFilter;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.AsciiString;
 import org.wso2.custom.inbound.http.InboundHttpHandler;
+
+import javax.net.ssl.SSLException;
+import java.security.cert.CertificateException;
 
 public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChannel> {
 
@@ -117,4 +128,6 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
             ctx.fireUserEventTriggered(evt);
         }
     }
+
+
 }
