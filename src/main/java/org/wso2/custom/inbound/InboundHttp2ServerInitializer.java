@@ -43,12 +43,15 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.AsciiString;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.custom.inbound.http.InboundHttpHandler;
 
 import javax.net.ssl.SSLException;
 import java.security.cert.CertificateException;
 
 public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChannel> {
+    private static final Log log = LogFactory.getLog(InboundHttp2ServerInitializer.class);
 
     private static final UpgradeCodecFactory upgradeCodecFactory = new UpgradeCodecFactory() {
         @Override
@@ -106,7 +109,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
             @Override
             protected void channelRead0(ChannelHandlerContext ctx, HttpMessage msg) throws Exception {
                 // If this handler is hit then no upgrade has been attempted and the client is just talking HTTP.
-                System.err.println("Directly talking: " + msg.protocolVersion() + " (no upgrade was attempted)");
+                log.info("No upgrade done: continue with " + msg.protocolVersion());
                 ChannelPipeline pipeline = ctx.pipeline();
                 ChannelHandlerContext thisCtx = pipeline.context(this);
                 pipeline.addAfter(thisCtx.name(), null, new InboundHttpHandler());
@@ -124,7 +127,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
     private static class UserEventLogger extends ChannelInboundHandlerAdapter {
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
-            System.out.println("User Event Triggered: " + evt);
+            log.info("User Event Triggered: " + evt);
             ctx.fireUserEventTriggered(evt);
         }
     }

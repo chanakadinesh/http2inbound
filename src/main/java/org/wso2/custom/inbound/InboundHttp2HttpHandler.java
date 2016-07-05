@@ -10,7 +10,7 @@ import org.wso2.custom.inbound.http.InboundHttpHandler;
 
 public class InboundHttp2HttpHandler extends ApplicationProtocolNegotiationHandler {
 
-    private static final int MAX_CONTENT_LENGTH = 1024 * 100;
+    private static final int MAX_CONTENT_LENGTH = 2048 * 100;
 
     protected InboundHttp2HttpHandler() {
         super(ApplicationProtocolNames.HTTP_1_1);

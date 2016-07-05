@@ -47,6 +47,7 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
      * Initialize the listening
      */
     public void init() {
+        //Starting HTTP
         Thread serverHttpThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -75,6 +76,7 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
         serverHttpThread.start();
         log.info("Http2 Inbound Initialization Completed for http.....");
 
+        //Starting HTTPS
         Thread serverHttpsThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -111,7 +113,7 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
         log.info("Inside the destroy method, destroying the listening inbound ...");
     }
 
-    private SslContext getSSLContext(){
+    private SslContext getSSLContext() {
         SslContext sslContext = null;
         SslProvider provider = OpenSsl.isAlpnSupported() ? SslProvider.OPENSSL : SslProvider.JDK;
         try {
@@ -123,7 +125,6 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
                     .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
                     .applicationProtocolConfig(new ApplicationProtocolConfig(
                             ApplicationProtocolConfig.Protocol.ALPN,
-//                    Protocol.NPN,
                             // NO_ADVERTISE is currently the only mode supported by both OpenSsl and JDK providers.
                             ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
                             // ACCEPT is currently the only mode supported by both OpenSsl and JDK providers.

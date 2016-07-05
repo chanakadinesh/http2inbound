@@ -11,6 +11,8 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.util.CharsetUtil;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.Arrays;
 
@@ -25,6 +27,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 public class InboundHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+    private static final Log log = LogFactory.getLog(InboundHttpHandler.class);
     static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Hello World", CharsetUtil.UTF_8));
 
     public InboundHttpHandler() {
@@ -32,8 +35,9 @@ public class InboundHttpHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) throws Exception {
-        System.out.println("RequestHeaders : " + (Arrays.asList(req.headers().entries().toArray())));
-        System.out.println("RequestPayload : " + new String(ByteBufUtil.getBytes(req.content())));
+        log.info("RequestHeaders : " + (Arrays.asList(req.headers().entries().toArray())));
+        log.info("RequestPayload : " + new String(ByteBufUtil.getBytes(req.content())));
+
         if (HttpUtil.is100ContinueExpected(req)) {
             ctx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE));
         }

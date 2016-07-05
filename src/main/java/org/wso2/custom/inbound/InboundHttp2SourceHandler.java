@@ -1,7 +1,5 @@
 package org.wso2.custom.inbound;
 
-import static io.netty.buffer.Unpooled.copiedBuffer;
-import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 import io.netty.buffer.ByteBuf;
@@ -9,15 +7,12 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.DefaultHeaders;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
-import io.netty.util.CharsetUtil;
 import org.apache.axiom.om.OMAbstractFactory;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.soap.SOAPEnvelope;
@@ -33,7 +28,8 @@ import org.apache.axis2.context.ServiceContext;
 import org.apache.axis2.description.InOutAxisOperation;
 import org.apache.axis2.transport.TransportUtils;
 import org.apache.commons.io.input.AutoCloseInputStream;
-import org.apache.http.protocol.HTTP;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -42,7 +38,6 @@ import org.apache.synapse.inbound.InboundEndpoint;
 import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.mediators.MediatorFaultHandler;
 import org.apache.synapse.mediators.base.SequenceMediator;
-import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
 import org.wso2.carbon.inbound.endpoint.osgi.service.ServiceReferenceHolder;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
@@ -56,6 +51,8 @@ import java.util.TreeMap;
 
 @Sharable
 public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
+    private static final Log log = LogFactory.getLog(InboundHttp2SourceHandler.class);
+    private static final String ENDPOINT_NAME = "Http2Inbound";
 
     private InboundHttp2ResponseSender responseSender;
     private ChannelHandlerContext channelCtx;
@@ -90,22 +87,16 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         this.responseSender = new InboundHttp2ResponseSender(this);
     }
 
-    /**
-     * If receive a frame with end-of-stream set, send a pre-canned response.
-     */
     public void onDataRead(ChannelHandlerContext ctx, Http2DataFrame data) throws Exception {
-        String endpointName = "Http2Inbound";
-        String contentType = "text/xml";
-        if (data.isEndStream()) {
-            System.out.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^Object Instance : " + this.hashCode());
-            System.out.println("RequestPayload : " + new String(ByteBufUtil.getBytes(data.content())));
 
+        if (data.isEndStream()) {
+            log.info("RequestPayload : " + new String(ByteBufUtil.getBytes(data.content())));
 
             MessageContext synCtx = getSynapseMessageContext("carbon.super");
-            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(endpointName);
+            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(ENDPOINT_NAME);
 
             if (endpoint == null) {
-                System.out.println("Cannot find deployed inbound endpoint " + endpointName + "for process request");
+                log.error("Cannot find deployed inbound endpoint " + ENDPOINT_NAME + "for process request");
                 return;
             }
 
@@ -113,38 +104,31 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
                     ((org.apache.synapse.core.axis2.Axis2MessageContext) synCtx)
                             .getAxis2MessageContext();
 
+            //Select the message builder
             Builder builder = null;
+            String contentType = headerMap.get("content-type");
             if (contentType == null) {
                 System.out.println("No content type specified. Using SOAP builder.");
                 builder = new SOAPBuilder();
             } else {
-                int index = contentType.indexOf(';');
-                String type = index > 0 ? contentType.substring(0, index)
-                                        : contentType;
                 try {
-                    builder = BuilderUtil.getBuilderFromSelector(type, axis2MsgCtx);
+                    builder = BuilderUtil.getBuilderFromSelector(contentType, axis2MsgCtx);
                 } catch (AxisFault axisFault) {
                     System.out.println("Error while creating message builder :: "
                                        + axisFault.getMessage());
                 }
                 if (builder == null) {
-                    System.out.println("No message builder found for type '" + type
+                    System.out.println("No message builder found for type '" + contentType
                                        + "'. Falling back to SOAP.");
                     builder = new SOAPBuilder();
                 }
             }
 
-            OMElement documentElement = null;
+            //Inject to the sequence
             InputStream in = new AutoCloseInputStream(new ByteArrayInputStream(ByteBufUtil.getBytes(data.content())));
-            documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
+            OMElement documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
             synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
             injectToSequence(synCtx, endpoint);
-
-//            ByteBuf content = ctx.alloc().buffer();
-//            content.writeBytes(RESPONSE_BYTES);
-//            ByteBufUtil.writeAscii(content, " - via HTTP/2");
-//            sendResponse(ctx, content);
-
         }
     }
 
@@ -164,7 +148,8 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         SequenceMediator faultSequence = getFaultSequence(synCtx, endpoint);
         MediatorFaultHandler mediatorFaultHandler = new MediatorFaultHandler(faultSequence);
         synCtx.pushFaultHandler(mediatorFaultHandler);
-        System.out.println("+++++++ injecting message to sequence : " + endpoint.getInjectingSeq());
+
+        log.info("Injecting message to sequence : " + endpoint.getInjectingSeq());
         synCtx.setProperty("inbound.endpoint.name", endpoint.getName());
         synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
     }
@@ -187,12 +172,12 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
     public void onHeadersRead(ChannelHandlerContext ctx, Http2HeadersFrame headers)
             throws Exception {
         if (headers.headers().contains("http2-settings")) {
-            System.out.println("+++++++++ Settings Frame Headers " + headers.headers().toString());
+            log.info("Settings Frame Headers " + headers.headers().toString());
             return;
         }
         Set<CharSequence> headerSet = headers.headers().names();
         for (CharSequence header : headerSet) {
-            System.out.println("+++++++++ Header " + header + " : " + headers.headers().get(header));
+            log.info("Header " + header + " : " + headers.headers().get(header));
             if (header.charAt(0) != ':') {
                 headerMap.put(header.toString(), headers.headers().get(header).toString());
             }
@@ -202,6 +187,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
     public void sendResponse(MessageContext msgCtx) {
         ByteBuf content = this.getChannelCtx().alloc().buffer();
         content.writeBytes(msgCtx.getEnvelope().toString().getBytes());
+
         // Send a frame for the response status
         Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
         this.getChannelCtx().write(new DefaultHttp2HeadersFrame(headers));
@@ -247,10 +233,6 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
         axis2MsgCtx.setConfigurationContext(ServiceReferenceHolder.getInstance().getConfigurationContextService()
                                                     .getServerConfigContext());
         return axis2MsgCtx;
-    }
-
-    public InboundHttp2ResponseSender getResponseSender() {
-        return responseSender;
     }
 
     public ChannelHandlerContext getChannelCtx() {
