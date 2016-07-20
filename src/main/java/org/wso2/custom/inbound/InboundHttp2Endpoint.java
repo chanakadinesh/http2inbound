@@ -47,62 +47,42 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
      * Initialize the listening
      */
     public void init() {
+
         //Starting HTTP
-        Thread serverHttpThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                EventLoopGroup group = new NioEventLoopGroup();
-                try {
-                    ServerBootstrap b = new ServerBootstrap();
-                    b.option(ChannelOption.SO_BACKLOG, 1024);
-                    b.group(group)
-                            .channel(NioServerSocketChannel.class)
-                            .handler(new LoggingHandler(LogLevel.INFO))
-                            .childHandler(new InboundHttp2ServerInitializer(null));
+        EventLoopGroup group = new NioEventLoopGroup();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.option(ChannelOption.SO_BACKLOG, 1024);
+            b.group(group)
+                    .channel(NioServerSocketChannel.class)
+                    .handler(new LoggingHandler(LogLevel.INFO))
+                    .childHandler(new InboundHttp2ServerInitializer(null));
 
-                    Channel ch = b.bind(HTTP_PORT).sync().channel();
+            Channel ch = b.bind(HTTP_PORT).sync().channel();
 
-                    log.info("Http2 Inbound started on Port : " + HTTP_PORT);
+            log.info("Http2 Inbound started on Port : " + HTTP_PORT);
 
-                    ch.closeFuture().sync();
-                } catch (InterruptedException e) {
-                    log.error("Closing Http2 Inbound on Port : " + HTTP_PORT);
-                } finally {
-                    group.shutdownGracefully();
-                    log.info("Http2 Inbound Stopped on Port : " + HTTP_PORT);
-                }
-            }
-        });
-        serverHttpThread.start();
+        } catch (InterruptedException e) {
+            log.error("Closing Http2 Inbound on Port : " + HTTP_PORT);
+        }
         log.info("Http2 Inbound Initialization Completed for http.....");
 
         //Starting HTTPS
-        Thread serverHttpsThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                EventLoopGroup group = new NioEventLoopGroup();
-                try {
-                    ServerBootstrap b = new ServerBootstrap();
-                    b.option(ChannelOption.SO_BACKLOG, 1024);
-                    b.group(group)
-                            .channel(NioServerSocketChannel.class)
-                            .handler(new LoggingHandler(LogLevel.INFO))
-                            .childHandler(new InboundHttp2ServerInitializer(getSSLContext()));
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.option(ChannelOption.SO_BACKLOG, 1024);
+            b.group(group)
+                    .channel(NioServerSocketChannel.class)
+                    .handler(new LoggingHandler(LogLevel.INFO))
+                    .childHandler(new InboundHttp2ServerInitializer(getSSLContext()));
 
-                    Channel ch = b.bind(HTTPS_PORT).sync().channel();
+            Channel ch = b.bind(HTTPS_PORT).sync().channel();
 
-                    log.info("Http2 Inbound started on Port : " + HTTPS_PORT);
+            log.info("Http2 Inbound started on Port : " + HTTPS_PORT);
 
-                    ch.closeFuture().sync();
-                } catch (InterruptedException e) {
-                    log.error("Closing Http2 Inbound on Port : " + HTTPS_PORT);
-                } finally {
-                    group.shutdownGracefully();
-                    log.info("Http2 Inbound Stopped on Port : " + HTTPS_PORT);
-                }
-            }
-        });
-        serverHttpsThread.start();
+        } catch (InterruptedException e) {
+            log.error("Closing Http2 Inbound on Port : " + HTTPS_PORT);
+        }
         log.info("Http2 Inbound Initialization Completed for https.....");
     }
 
