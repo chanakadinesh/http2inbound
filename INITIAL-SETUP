@@ -1,0 +1,22 @@
+1. Upgrade wso2.carbon.mediation to netty 4.1.1 or further version.
+
+	a) change netty version in carbon-mediation pom.xml 
+		<netty.version>4.1.4.Final</netty.version>
+
+	b) Add netty-all dependancy to
+		carbon-mediatio/compnents/carbon-transport/websocket/org-wso2-carbon-websocket-transport pom.xml
+		carbon-mediation/components/inbound-endpoints/org.wso2.carbon.inbound.endpoint pom.xml
+		carbon-mediation/features/carbon-transports/org.wso2.carbon.websocket.feature pom.xml
+		carbon-mediation/features/inbound-endpoints/org.wso2.carbon.inbound.endpoints.server.feature
+
+		<dependency>
+			<groupId>io.netty</groupId>
+			<artifactId>netty-all</artifactId>
+		</dependency>
+	
+	c) Add bundle netty-resolver to 
+		carbon-mediation/features/carbon-transports/org.wso2.carbon.websocket.feature pom.xml
+		
+		<bundleDef>
+			io.netty:netty-resolver:compatible:${netty.version}
+		</bundleDef>
