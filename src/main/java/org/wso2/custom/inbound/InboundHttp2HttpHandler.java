@@ -3,6 +3,7 @@ package org.wso2.custom.inbound;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http2.Http2Codec;
 import io.netty.handler.codec.http2.Http2MultiplexCodec;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
@@ -19,7 +20,7 @@ public class InboundHttp2HttpHandler extends ApplicationProtocolNegotiationHandl
     @Override
     protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
         if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-            ctx.pipeline().addLast(new Http2MultiplexCodec(true, new InboundHttp2SourceHandler()));
+            ctx.pipeline().addLast(new Http2Codec(true, new InboundHttp2SourceHandler()));
             return;
         }
 

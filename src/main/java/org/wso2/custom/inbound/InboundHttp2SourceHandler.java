@@ -1,5 +1,7 @@
 package org.wso2.custom.inbound;
 
+import static io.netty.buffer.Unpooled.copiedBuffer;
+import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 import io.netty.buffer.ByteBuf;
@@ -13,6 +15,7 @@ import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
+import io.netty.util.CharsetUtil;
 import org.apache.axiom.om.OMAbstractFactory;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.soap.SOAPEnvelope;
@@ -53,6 +56,7 @@ import java.util.TreeMap;
 public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
     private static final Log log = LogFactory.getLog(InboundHttp2SourceHandler.class);
     private static final String ENDPOINT_NAME = "Http2Inbound";
+    static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Hello World", CharsetUtil.UTF_8));
 
     private InboundHttp2ResponseSender responseSender;
     private ChannelHandlerContext channelCtx;
@@ -130,6 +134,9 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
             synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
             injectToSequence(synCtx, endpoint);
         }
+        if (data.isEndStream()) {
+          //  sendResponse(ctx, data.content().retain());
+        }
     }
 
     private void injectToSequence(org.apache.synapse.MessageContext synCtx,
@@ -171,17 +178,27 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler {
      */
     public void onHeadersRead(ChannelHandlerContext ctx, Http2HeadersFrame headers)
             throws Exception {
-        if (headers.headers().contains("http2-settings")) {
-            log.info("Settings Frame Headers " + headers.headers().toString());
-            return;
-        }
-        Set<CharSequence> headerSet = headers.headers().names();
-        for (CharSequence header : headerSet) {
-            log.info("Header " + header + " : " + headers.headers().get(header));
-            if (header.charAt(0) != ':') {
-                headerMap.put(header.toString(), headers.headers().get(header).toString());
+        log.info("Header detected"+ headers.headers());
+        if (headers.isEndStream()){
+            if (headers.headers().contains("http2-settings")) {
+                log.info("Settings Frame Headers " + headers.headers().toString());
+                return;
+            }
+            Set<CharSequence> headerSet = headers.headers().names();
+            for (CharSequence header : headerSet) {
+                log.info("Header " + header + " : " + headers.headers().get(header));
+                if (header.charAt(0) != ':') {
+                    headerMap.put(header.toString(), headers.headers().get(header).toString());
+                }
             }
         }
+    }
+    private void sendResponse(ChannelHandlerContext ctx, ByteBuf payload) {
+        System.out.println("sendRespond triggered");
+        // Send a frame for the response status
+        Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
+        ctx.write(new DefaultHttp2HeadersFrame(headers));
+        ctx.writeAndFlush(new DefaultHttp2DataFrame(payload, true));
     }
 
     public void sendResponse(MessageContext msgCtx) {

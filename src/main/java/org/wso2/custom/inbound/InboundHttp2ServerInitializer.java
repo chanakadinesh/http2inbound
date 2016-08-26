@@ -24,33 +24,24 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
-import io.netty.handler.codec.http2.*;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.ssl.ApplicationProtocolConfig;
-import io.netty.handler.ssl.ApplicationProtocolNames;
-import io.netty.handler.ssl.OpenSsl;
+import io.netty.handler.codec.http2.Http2Codec;
+import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.codec.http.HttpServerCodec;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.AsciiString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.custom.inbound.http.InboundHttpHandler;
 
-import javax.net.ssl.SSLException;
-import java.security.cert.CertificateException;
-
 public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChannel> {
     private static final Log log = LogFactory.getLog(InboundHttp2ServerInitializer.class);
 
     private static final UpgradeCodecFactory upgradeCodecFactory = new UpgradeCodecFactory() {
+
         public UpgradeCodec newUpgradeCodec(CharSequence protocol) {
             if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
                 return new Http2ServerUpgradeCodec(new Http2Codec(true,
@@ -110,7 +101,6 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
                 ChannelHandlerContext thisCtx = pipeline.context(this);
                 pipeline.addAfter(thisCtx.name(), null, new InboundHttpHandler());
                 pipeline.replace(this, null, new HttpObjectAggregator(maxHttpContentLength));
-                pipeline.addLast(new LoggingHandler(LogLevel.INFO));
                 ctx.fireChannelRead(msg);
             }
         });
