@@ -20,13 +20,18 @@ public class InboundHttp2ResponseSender implements InboundResponseSender {
     }
 
     public void sendBack(MessageContext synCtx) {
-        try {
-            RelayUtils.buildMessage(((Axis2MessageContext)synCtx).getAxis2MessageContext());
-        } catch (IOException iEx) {
-            log.error("Error while building the message", iEx);
-        } catch (XMLStreamException ex) {
-            log.error("Failed to convert message to specified output format", ex);
+        if(synCtx!=null){
+            try {
+                RelayUtils.buildMessage(((Axis2MessageContext)synCtx).getAxis2MessageContext());
+            } catch (IOException iEx) {
+                log.error("Error while building the message", iEx);
+            } catch (XMLStreamException ex) {
+                log.error("Failed to convert message to specified output format", ex);
+            }
+            sourceHandler.sendResponse(synCtx);
         }
-        sourceHandler.sendResponse(synCtx);
+        else {
+            log.debug("send back message is null");
+        }
     }
 }

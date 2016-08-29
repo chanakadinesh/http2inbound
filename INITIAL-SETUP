@@ -20,3 +20,7 @@
 		<bundleDef>
 			io.netty:netty-resolver:compatible:${netty.version}
 		</bundleDef>
+
+	d) When deploying jar on repository.component.lib add netty.handler and netty.codec.http2 jars with it.
+	e) When initiating inbound use Http2Inbound as the name of inbound.
+

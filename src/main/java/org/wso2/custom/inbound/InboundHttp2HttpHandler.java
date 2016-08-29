@@ -4,10 +4,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http2.Http2Codec;
-import io.netty.handler.codec.http2.Http2MultiplexCodec;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
-import org.wso2.custom.inbound.http.InboundHttpHandler;
+import org.wso2.custom.inbound.http.InboundHttpSourceHandler;
 
 public class InboundHttp2HttpHandler extends ApplicationProtocolNegotiationHandler {
 
@@ -27,7 +26,7 @@ public class InboundHttp2HttpHandler extends ApplicationProtocolNegotiationHandl
         if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
             ctx.pipeline().addLast(new HttpServerCodec(),
                                    new HttpObjectAggregator(MAX_CONTENT_LENGTH),
-                                   new InboundHttpHandler());
+                                   new InboundHttpSourceHandler());
             return;
         }
 
