@@ -113,7 +113,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
     private static class UserEventLogger extends ChannelInboundHandlerAdapter {
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
-            log.info("User Event Triggered: " + evt);
+          //  log.info("User Event Triggered: " + evt);
             ctx.fireUserEventTriggered(evt);
         }
     }

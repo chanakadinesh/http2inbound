@@ -6,10 +6,6 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.CharsetUtil;
 import org.apache.axiom.om.OMElement;
 import org.apache.axis2.AxisFault;
@@ -22,12 +18,13 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.inbound.InboundEndpoint;
-import org.wso2.custom.inbound.InboundHttp2Constants;
+import org.wso2.custom.inbound.InboundHttp2ResponseSender;
+import org.wso2.custom.inbound.common.InboundHttp2Constants;
 import org.wso2.custom.inbound.common.InboundMessageHandler;
+import org.wso2.custom.inbound.common.SourceHandler;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.Arrays;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
@@ -37,17 +34,17 @@ import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.wso2.custom.inbound.InboundHttp2Constants.ENDPOINT_NAME;
+import static org.wso2.custom.inbound.common.InboundHttp2Constants.ENDPOINT_NAME;
 
-public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHttpRequest> implements SourceHandler{
     private static final Log log = LogFactory.getLog(InboundHttpSourceHandler.class);
     static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Hello World", CharsetUtil.UTF_8));
     private ChannelHandlerContext channelCtx;
     private boolean keepAlive;
     private InboundMessageHandler messageHandler;
-    private InboundHttpResponseSender responseSender;
+    private InboundHttp2ResponseSender responseSender;
     public InboundHttpSourceHandler() {
-        responseSender=new InboundHttpResponseSender(this);
+        responseSender=new InboundHttp2ResponseSender(this);
         messageHandler=new InboundMessageHandler(responseSender);
     }
 
@@ -60,7 +57,7 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         this.keepAlive = HttpUtil.isKeepAlive(req);
         String method = req != null ? req.method().toString() : "";
         if(method.equalsIgnoreCase("POST")){
-            MessageContext synCtx = messageHandler.getSynapseMessageContext("carbon.super");
+            MessageContext synCtx = messageHandler.getSynapseMessageContext(InboundHttp2Constants.TENANT_DOMAIN);
             InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(InboundHttp2Constants.ENDPOINT_NAME);
 
             if (endpoint == null) {
@@ -73,24 +70,9 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
                             .getAxis2MessageContext();
 
             //Select the message builder
-            Builder builder = null;
+
             String contentType =req.headers().get(CONTENT_TYPE);
-            if (contentType == null) {
-                log.info("No content type specified. Using SOAP builder.");
-                builder = new SOAPBuilder();
-            } else {
-                try {
-                    builder = BuilderUtil.getBuilderFromSelector(contentType, axis2MsgCtx);
-                } catch (AxisFault axisFault) {
-                    log.error("Error while creating message builder :: "
-                            + axisFault.getMessage());
-                }
-                if (builder == null) {
-                    log.info("No message builder found for type '" + contentType
-                            + "'. Falling back to SOAP.");
-                    builder = new SOAPBuilder();
-                }
-            }
+            Builder builder = messageHandler.getMessageBuilder(contentType,axis2MsgCtx);
 
             //Inject to the sequence
             InputStream in = new AutoCloseInputStream(new ByteArrayInputStream(ByteBufUtil.getBytes(req.content())));

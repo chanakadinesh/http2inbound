@@ -5,6 +5,9 @@ import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axiom.soap.SOAPFactory;
 import org.apache.axiom.util.UIDGenerator;
 import org.apache.axis2.AxisFault;
+import org.apache.axis2.builder.BuilderUtil;
+import org.apache.axis2.builder.Builder;
+import org.apache.axis2.builder.SOAPBuilder;
 import org.apache.axis2.context.ConfigurationContext;
 import org.apache.axis2.context.OperationContext;
 import org.apache.axis2.context.ServiceContext;
@@ -108,5 +111,43 @@ public class InboundMessageHandler {
         axis2MsgCtx.setConfigurationContext(ServiceReferenceHolder.getInstance().getConfigurationContextService()
                 .getServerConfigContext());
         return axis2MsgCtx;
+    }
+
+    public Builder getMessageBuilder(String contentType,org.apache.axis2.context.MessageContext axis2MsgCtx){
+        Builder builder=null;
+        if (contentType == null) {
+            log.info("No content type specified. Using SOAP builder.");
+            builder= new SOAPBuilder();
+        } else {
+            try {
+                builder = BuilderUtil.getBuilderFromSelector(contentType, axis2MsgCtx);
+            } catch (AxisFault axisFault) {
+                log.error("Error while creating message builder :: "
+                        + axisFault.getMessage());
+            }
+            if (builder == null) {
+                log.info("No message builder found for type '" + contentType
+                        + "'. Falling back to SOAP.");
+                builder = new SOAPBuilder();
+            }
+        }
+        return builder;
+    }
+    public void injectToMainSequence(org.apache.synapse.MessageContext synCtx,
+                                      InboundEndpoint endpoint) {
+
+        SequenceMediator injectingSequence = (SequenceMediator) synCtx.getMainSequence();
+
+        SequenceMediator faultSequence = getFaultSequence(synCtx, endpoint);
+
+        MediatorFaultHandler mediatorFaultHandler = new MediatorFaultHandler(faultSequence);
+        synCtx.pushFaultHandler(mediatorFaultHandler);
+
+        /* handover synapse message context to synapse environment for inject it to given
+        sequence in synchronous manner*/
+        if (log.isDebugEnabled()) {
+            log.debug("injecting message to sequence : " + endpoint.getInjectingSeq());
+        }
+        synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
     }
 }
