@@ -40,31 +40,35 @@ import org.wso2.custom.inbound.http.InboundHttpSourceHandler;
 public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChannel> {
     private static final Log log = LogFactory.getLog(InboundHttp2ServerInitializer.class);
 
-    private static final UpgradeCodecFactory upgradeCodecFactory = new UpgradeCodecFactory() {
 
-        public UpgradeCodec newUpgradeCodec(CharSequence protocol) {
-            if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
-                return new Http2ServerUpgradeCodec(new Http2Codec(true,
-                      new InboundHttp2SourceHandler()));
-            } else {
-                return null;
-            }
-        }
-    };
+    private final UpgradeCodecFactory upgradeCodecFactory;
 
     private final SslContext sslCtx;
     private final int maxHttpContentLength;
+    private final InboundHttp2Configuration config;
 
-    public InboundHttp2ServerInitializer(SslContext sslCtx) {
-        this(sslCtx, 16 * 1024);
+    public InboundHttp2ServerInitializer(SslContext sslCtx,InboundHttp2Configuration config) {
+        this(sslCtx, 16 * 1024,config);
     }
 
-    public InboundHttp2ServerInitializer(SslContext sslCtx, int maxHttpContentLength) {
+    public InboundHttp2ServerInitializer(SslContext sslCtx, int maxHttpContentLength, final InboundHttp2Configuration config) {
         if (maxHttpContentLength < 0) {
             throw new IllegalArgumentException("maxHttpContentLength (expected >= 0): " + maxHttpContentLength);
         }
+        this.config=config;
         this.sslCtx = sslCtx;
         this.maxHttpContentLength = maxHttpContentLength;
+        upgradeCodecFactory = new UpgradeCodecFactory() {
+
+            public UpgradeCodec newUpgradeCodec(CharSequence protocol) {
+                if (AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol)) {
+                    return new Http2ServerUpgradeCodec(new Http2Codec(true,
+                            new InboundHttp2SourceHandler(config)));
+                } else {
+                    return null;
+                }
+            }
+        };
     }
 
     @Override
@@ -80,7 +84,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
      * Configure the pipeline for TLS NPN negotiation to HTTP/2.
      */
     private void configureSsl(SocketChannel ch) {
-        ch.pipeline().addLast(sslCtx.newHandler(ch.alloc()), new InboundHttp2HttpHandler());
+        ch.pipeline().addLast(sslCtx.newHandler(ch.alloc()), new InboundHttp2HttpHandler(config));
     }
 
     /**
@@ -99,7 +103,7 @@ public class InboundHttp2ServerInitializer extends ChannelInitializer<SocketChan
                 log.info("No upgrade done: continue with " + msg.protocolVersion());
                 ChannelPipeline pipeline = ctx.pipeline();
                 ChannelHandlerContext thisCtx = pipeline.context(this);
-                pipeline.addAfter(thisCtx.name(), null, new InboundHttpSourceHandler());
+                pipeline.addAfter(thisCtx.name(), null, new InboundHttpSourceHandler(config));
                 pipeline.replace(this, null, new HttpObjectAggregator(maxHttpContentLength));
                 ctx.fireChannelRead(msg);
             }

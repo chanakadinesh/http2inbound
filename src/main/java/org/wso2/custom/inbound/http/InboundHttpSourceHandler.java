@@ -18,6 +18,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.inbound.InboundEndpoint;
+import org.wso2.custom.inbound.InboundHttp2Configuration;
 import org.wso2.custom.inbound.InboundHttp2ResponseSender;
 import org.wso2.custom.inbound.common.InboundHttp2Constants;
 import org.wso2.custom.inbound.common.InboundMessageHandler;
@@ -34,7 +35,6 @@ import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
 import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.wso2.custom.inbound.common.InboundHttp2Constants.ENDPOINT_NAME;
 
 public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHttpRequest> implements SourceHandler{
     private static final Log log = LogFactory.getLog(InboundHttpSourceHandler.class);
@@ -43,7 +43,9 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
     private boolean keepAlive;
     private InboundMessageHandler messageHandler;
     private InboundHttp2ResponseSender responseSender;
-    public InboundHttpSourceHandler() {
+    private InboundHttp2Configuration config;
+    public InboundHttpSourceHandler(InboundHttp2Configuration config) {
+        this.config=config;
         responseSender=new InboundHttp2ResponseSender(this);
         messageHandler=new InboundMessageHandler(responseSender);
     }
@@ -58,10 +60,10 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         String method = req != null ? req.method().toString() : "";
         if(method.equalsIgnoreCase("POST")){
             MessageContext synCtx = messageHandler.getSynapseMessageContext(InboundHttp2Constants.TENANT_DOMAIN);
-            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(InboundHttp2Constants.ENDPOINT_NAME);
+            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(this.config.getName());
 
             if (endpoint == null) {
-                log.error("Cannot find deployed inbound endpoint " + ENDPOINT_NAME + "for process request");
+                log.error("Cannot find deployed inbound endpoint " + this.config.getName() + "for process request");
                 return;
             }
 

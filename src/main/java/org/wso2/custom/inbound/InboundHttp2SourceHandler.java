@@ -3,7 +3,6 @@ package org.wso2.custom.inbound;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
-import static org.wso2.custom.inbound.common.InboundHttp2Constants.ENDPOINT_NAME;
 import static org.wso2.custom.inbound.common.InboundHttp2Constants.TENANT_DOMAIN;
 
 import io.netty.buffer.ByteBuf;
@@ -69,11 +68,12 @@ import java.util.regex.Pattern;
 @Sharable
 public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements SourceHandler {
     private static final Log log = LogFactory.getLog(InboundHttp2SourceHandler.class);
-    static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Inbound Endpoint", CharsetUtil.UTF_8));
-    public enum ResponseType {RST_STREAM};
+   // static final ByteBuf RESPONSE_BYTES = unreleasableBuffer(copiedBuffer("Inbound Endpoint", CharsetUtil.UTF_8));
+   // public enum ResponseType {RST_STREAM};
     private InboundMessageHandler messageHandler;
     private InboundHttp2ResponseSender responseSender;
-    private ChannelHandlerContext channelCtx;
+  //  private ChannelHandlerContext channelCtx;
+    private final InboundHttp2Configuration config;
     private HashMap<Integer,HTTP2SourceRequest> streams=new HashMap<Integer,HTTP2SourceRequest>();
     private Map<String, String> headerMap
             = new TreeMap<String, String>(new Comparator<String>() {
@@ -82,8 +82,14 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
         }
     });
     //private InboundHttp2Configuration config=new InboundHttp2Configuration.InboundHttp2ConfigurationBuilder()
-    public final Pattern dispatchPattern=Pattern.compile(".*");
+    public final Pattern dispatchPattern;
     private Matcher patternMatcher;
+
+    public InboundHttp2SourceHandler(InboundHttp2Configuration config) {
+        this.config=config;
+        dispatchPattern=Pattern.compile(config.getDispatchPattern());
+
+    }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
@@ -105,7 +111,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        this.channelCtx = ctx;
+        //this.channelCtx = ctx;
         this.responseSender = new InboundHttp2ResponseSender(this);
         this.messageHandler=new InboundMessageHandler(this.responseSender);
     }
@@ -162,10 +168,11 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
     }
 
     public synchronized void sendResponse(MessageContext msgCtx) {
-        ByteBuf content = this.getChannelCtx().alloc().buffer();
+        ChannelHandlerContext channel=(ChannelHandlerContext) msgCtx.getProperty("stream-channel");
+
+        ByteBuf content = channel.alloc().buffer();
         content.writeBytes(msgCtx.getEnvelope().toString().getBytes());
 
-        ChannelHandlerContext channel=(ChannelHandlerContext) msgCtx.getProperty("stream-channel");
         // Send a frame for the response status
         Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
 
@@ -186,9 +193,9 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
 
             MessageContext synCtx = messageHandler.getSynapseMessageContext(TENANT_DOMAIN);
 
-            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(InboundHttp2Constants.ENDPOINT_NAME);
+            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(this.config.getName());
             if (endpoint == null) {
-                log.error("Cannot find deployed inbound endpoint " + ENDPOINT_NAME + "for process request");
+                log.error("Cannot find deployed inbound endpoint " + this.config.getName() + "for process request");
                 return;
             }
 
@@ -427,9 +434,9 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
         return contentType != null && contentType.indexOf("text/xml") == -1 && contentType.indexOf("application/soap+xml") == -1;
     }
 
-    public ChannelHandlerContext getChannelCtx() {
+   /* public ChannelHandlerContext getChannelCtx() {
         return channelCtx;
-    }
+    }*/
 
     public boolean isRESTRequest(org.apache.axis2.context.MessageContext msgContext, String method) {
         if(msgContext.getProperty("rest_get_delete_invoke") != null && ((Boolean)msgContext.getProperty("rest_get_delete_invoke")).booleanValue()) {

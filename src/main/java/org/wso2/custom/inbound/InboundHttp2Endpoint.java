@@ -22,17 +22,17 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.inbound.InboundProcessorParams;
 import org.wso2.carbon.inbound.endpoint.protocol.generic.GenericInboundListener;
+import org.wso2.custom.inbound.common.InboundHttp2Constants;
 
 import javax.net.ssl.SSLException;
 import java.security.cert.CertificateException;
+import java.util.Properties;
 
 public final class InboundHttp2Endpoint extends GenericInboundListener {
 
     private static final Log log = LogFactory.getLog(InboundHttp2Endpoint.class);
 
-    private static final int HTTP_PORT = 8888;
-    private static final int HTTPS_PORT = 8889;
-
+    private static InboundHttp2Configuration configuration;
     /**
      * Constructor
      *
@@ -40,50 +40,58 @@ public final class InboundHttp2Endpoint extends GenericInboundListener {
      */
     public InboundHttp2Endpoint(InboundProcessorParams params) {
         super(params);
-        log.info("Initialized the custom listening inbound endpoint.");
+        this.configuration=(new InboundHttp2Configuration.InboundHttp2ConfigurationBuilder(this.params)).build();
+
+        log.info("Initialized the custom listening inbound endpoint.:params:"+params);
     }
 
     /**
      * Initialize the listening
      */
     public void init() {
-
+        // this.name=super.params.getName();
         //Starting HTTP
+        if(configuration==null){
+            this.configuration=(new InboundHttp2Configuration.InboundHttp2ConfigurationBuilder(super.params)).build();
+        }
+
         EventLoopGroup group = new NioEventLoopGroup();
-        try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.option(ChannelOption.SO_BACKLOG, 1024);
-            b.group(group)
-                    .channel(NioServerSocketChannel.class)
-                    .handler(new LoggingHandler(LogLevel.INFO))
-                    .childHandler(new InboundHttp2ServerInitializer(null));
+        if (!configuration.isSSL()) {
+            try {
+                ServerBootstrap b = new ServerBootstrap();
+                b.option(ChannelOption.SO_BACKLOG, 1024);
+                b.group(group)
+                        .channel(NioServerSocketChannel.class)
+                        .handler(new LoggingHandler(LogLevel.INFO))
+                        .childHandler(new InboundHttp2ServerInitializer(null,configuration));
 
-            Channel ch = b.bind(HTTP_PORT).sync().channel();
+                Channel ch = b.bind(configuration.getPort()).sync().channel();
 
-            log.info("Http2 Inbound started on Port : " + HTTP_PORT);
+                log.info("Http2 Inbound started on Port : " + configuration.getPort());
 
-        } catch (InterruptedException e) {
-            log.error("Closing Http2 Inbound on Port : " + HTTP_PORT);
+            } catch (InterruptedException e) {
+                log.error("Closing Http2 Inbound on Port : " + configuration.getPort());
+            }
+            log.info("Http2 Inbound Initialization Completed for http.....");
+        } else {
+            //Starting HTTPS
+            try {
+                ServerBootstrap b = new ServerBootstrap();
+                b.option(ChannelOption.SO_BACKLOG, 1024);
+                b.group(group)
+                        .channel(NioServerSocketChannel.class)
+                        .handler(new LoggingHandler(LogLevel.INFO))
+                        .childHandler(new InboundHttp2ServerInitializer(getSSLContext(),configuration));
+
+                Channel ch = b.bind(configuration.getPort()).sync().channel();
+
+                log.info("Http2 Inbound started on Port : " + configuration.getPort());
+
+            } catch (InterruptedException e) {
+                log.error("Closing Http2 Inbound on Port : " + configuration.getPort());
+            }
+            log.info("Http2 Inbound Initialization Completed for https.....");
         }
-        log.info("Http2 Inbound Initialization Completed for http.....");
-
-        //Starting HTTPS
-        try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.option(ChannelOption.SO_BACKLOG, 1024);
-            b.group(group)
-                    .channel(NioServerSocketChannel.class)
-                    .handler(new LoggingHandler(LogLevel.INFO))
-                    .childHandler(new InboundHttp2ServerInitializer(getSSLContext()));
-
-            Channel ch = b.bind(HTTPS_PORT).sync().channel();
-
-            log.info("Http2 Inbound started on Port : " + HTTPS_PORT);
-
-        } catch (InterruptedException e) {
-            log.error("Closing Http2 Inbound on Port : " + HTTPS_PORT);
-        }
-        log.info("Http2 Inbound Initialization Completed for https.....");
     }
 
     /**
