@@ -17,7 +17,17 @@ public class HTTP2SourceRequest {
     private int streamID;
     private ChannelHandlerContext channel;
     private HashMap<Byte,Http2Frame> frames=new HashMap<Byte,Http2Frame>();
-    private Map<String,String> headers=new TreeMap<String, String>();
+    private Map<String,String> headers=new TreeMap<String, String>(new Comparator<String>() {
+        public int compare(String o1, String o2) {
+            return o1.compareToIgnoreCase(o2);
+        }
+    });
+
+    public Map<String, String> getExcessHeaders() {
+        return excessHeaders;
+    }
+
+    private Map<String,String> excessHeaders=new TreeMap<String, String>();
     public HTTP2SourceRequest(int streamID,ChannelHandlerContext channel) {
         //log.info("HTTP2Request created for stram id:"+streamID);
         this.streamID = streamID;
@@ -42,8 +52,8 @@ public class HTTP2SourceRequest {
     }
 
     public String getMethod(){
-        if(headers.containsKey(":method")){
-            return headers.get(":method");
+        if(headers.containsKey("method")){
+            return headers.get("method");
         }else{
             return null;
         }
@@ -56,8 +66,8 @@ public class HTTP2SourceRequest {
         }
     }
     public String getUri(){
-        if(headers.containsKey(":path")){
-            return "/"+headers.get(":path");
+        if(headers.containsKey("path")){
+            return "/"+headers.get("path");
         }else{
             return null;
         }
@@ -96,5 +106,18 @@ public class HTTP2SourceRequest {
             }
         }
         return name;
+    }
+    public void setHeader(String key,String value){
+        if(key.charAt(0)==':'){
+            key=key.substring(1);
+        }
+        if(key.equalsIgnoreCase("authority")){
+            key="host";
+        }
+        if(headers.containsKey(key)){
+            excessHeaders.put(key,value);
+        }else{
+            headers.put(key,value);
+        }
     }
 }

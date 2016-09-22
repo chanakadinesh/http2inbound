@@ -17,6 +17,7 @@ import org.apache.axiom.om.OMElement;
 import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axiom.soap.SOAPFactory;
 import org.apache.axiom.soap.impl.llom.soap11.SOAP11Factory;
+import org.apache.axiom.util.UIDGenerator;
 import org.apache.axis2.AxisFault;
 import org.apache.axis2.addressing.EndpointReference;
 import org.apache.axis2.builder.Builder;
@@ -35,6 +36,9 @@ import org.apache.commons.io.input.AutoCloseInputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.cxf.transport.http.PatternBuilder;
+import org.apache.http.HttpInetConnection;
+import org.apache.http.nio.NHttpServerConnection;
+import org.apache.http.nio.reactor.ssl.SSLIOSession;
 import org.apache.http.protocol.HTTP;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
@@ -42,20 +46,24 @@ import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.inbound.InboundEndpoint;
 import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.rest.RESTRequestHandler;
+import org.apache.synapse.transport.nhttp.HttpCoreRequestResponseTransport;
 import org.apache.synapse.transport.nhttp.NHttpConfiguration;
 import org.apache.synapse.transport.nhttp.util.NhttpUtil;
 import org.apache.synapse.transport.nhttp.util.RESTUtil;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
+import org.apache.synapse.transport.passthru.SourceRequest;
 import org.apache.synapse.transport.passthru.config.PassThroughConfiguration;
 import org.apache.synapse.transport.passthru.config.SourceConfiguration;
 import org.wso2.carbon.inbound.endpoint.protocol.http.InboundHttpConstants;
 import org.wso2.carbon.inbound.endpoint.protocol.http.InboundHttpResponseSender;
 import org.wso2.carbon.inbound.endpoint.protocol.http.management.HTTPEndpointManager;
+import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import org.wso2.custom.inbound.common.InboundHttp2Constants;
 import org.wso2.custom.inbound.common.InboundMessageHandler;
 import org.wso2.custom.inbound.common.SourceHandler;
 
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.xml.parsers.FactoryConfigurationError;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -147,7 +155,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
         Map r_headers=request.getHeaders();
         Set<CharSequence> headerSet = headers.headers().names();
         for (CharSequence header : headerSet) {
-            r_headers.put(header.toString(), headers.headers().get(header).toString());
+            request.setHeader(header.toString(), headers.headers().get(header).toString());
         }
         if (headers.isEndStream() && !r_headers.containsKey("http2-settings")){
             //If stream ends with header frame it should be GET, DELETE call
@@ -190,8 +198,8 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
     private void processRequest(int streamID) throws AxisFault{
 
             HTTP2SourceRequest request=streams.get(streamID);
-
-            MessageContext synCtx = messageHandler.getSynapseMessageContext(TENANT_DOMAIN);
+            String tenantDomain=getTenantDomain(request);
+            MessageContext synCtx = messageHandler.getSynapseMessageContext(tenantDomain);
 
             InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(this.config.getName());
             if (endpoint == null) {
@@ -202,6 +210,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
             org.apache.axis2.context.MessageContext axis2MsgCtx =
                     ((org.apache.synapse.core.axis2.Axis2MessageContext) synCtx)
                             .getAxis2MessageContext();
+            updateMessageContext(axis2MsgCtx,request);
            // axis2MsgCtx.setProperty("stream-id",streamID);
             synCtx.setProperty("stream-id",streamID);
             synCtx.setProperty("stream-channel",request.getChannel());
@@ -209,7 +218,7 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
             axis2MsgCtx.setServerSide(true);
             axis2MsgCtx.setProperty("TransportInURL", request.getUri());
             String method=request.getMethod();
-            axis2MsgCtx.setIncomingTransportName(request.getHeader(":scheme"));
+            axis2MsgCtx.setIncomingTransportName(request.getHeader("scheme"));
             processHttpRequestUri(axis2MsgCtx,method,request);
             synCtx.setProperty(SynapseConstants.IS_INBOUND, true);
             synCtx.setProperty(InboundEndpointConstants.INBOUND_ENDPOINT_RESPONSE_WORKER,
@@ -543,4 +552,76 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
 
         return soapEnvelope;
     }
+
+    private String getTenantDomain(HTTP2SourceRequest request) {
+        String tenant = MultitenantUtils.getTenantDomainFromUrl(request.getUri());
+        if (tenant.equals(request.getUri())) {
+            return MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+        }
+        return tenant;
+    }
+
+    private org.apache.axis2.context.MessageContext updateMessageContext(org.apache.axis2.context.MessageContext msgContext, HTTP2SourceRequest request) {
+        Map excessHeaders = request.getExcessHeaders();
+        Map headers=request.getHeaders();
+        //ConfigurationContext cfgCtx = this.sourceConfiguration.getConfigurationContext();
+        if(msgContext == null) {
+            msgContext = new org.apache.axis2.context.MessageContext();
+        }
+
+        //msgContext.setMessageID(UIDGenerator.generateURNString());
+        //msgContext.setProperty("ClientApiNonBlocking", Boolean.FALSE);
+        //msgContext.setConfigurationContext(cfgCtx);
+        //NHttpServerConnection conn = request.getConnection();
+        if(request.getHeader("scheme")!=null && request.getHeader("scheme").equalsIgnoreCase("https")) {
+            msgContext.setTransportOut(msgContext.getConfigurationContext().getAxisConfiguration().getTransportOut("https"));
+            msgContext.setTransportIn(msgContext.getConfigurationContext().getAxisConfiguration().getTransportIn("https"));
+            //msgContext.setIncomingTransportName(this.sourceConfiguration.getInDescription() != null?this.sourceConfiguration.getInDescription().getName():"https");
+            //SSLIOSession headers = (SSLIOSession)conn.getContext().getAttribute("http.session.ssl");
+           /* if(headers != null && msgContext.getTransportIn() != null && msgContext.getTransportIn().getParameter("SSLVerifyClient") != null) {
+                try {
+                    msgContext.setProperty("ssl.client.auth.cert.X509", headers.getSSLSession().getPeerCertificateChain());
+                } catch (SSLPeerUnverifiedException var10) {
+                    if(log.isTraceEnabled()) {
+                        log.trace("Peer certificate chain is not available for MsgContext " + msgContext.getMessageID());
+                    }
+                }
+            }*/
+        } else {
+            msgContext.setTransportOut(msgContext.getConfigurationContext().getAxisConfiguration().getTransportOut("http"));
+            msgContext.setTransportIn(msgContext.getConfigurationContext().getAxisConfiguration().getTransportIn("http"));
+            //msgContext.setIncomingTransportName(this.sourceConfiguration.getInDescription() != null?this.sourceConfiguration.getInDescription().getName():"http");
+        }
+
+        msgContext.setProperty("OutTransportInfo", this);
+        msgContext.setServerSide(true);
+        msgContext.setProperty("TransportInURL", request.getUri());
+        TreeMap<String,String> headers1 = new TreeMap<String,String>(new Comparator<String>() {
+            public int compare(String o1, String o2) {
+                return o1.compareToIgnoreCase(o2);
+            }
+        });
+        Set entries = request.getHeaders().entrySet();
+        Iterator netConn = entries.iterator();
+
+        while(netConn.hasNext()) {
+            Map.Entry remoteAddress = (Map.Entry)netConn.next();
+            headers1.put(remoteAddress.getKey().toString(), remoteAddress.getValue().toString());
+        }
+
+        msgContext.setProperty("TRANSPORT_HEADERS", headers1);
+        msgContext.setProperty("EXCESS_TRANSPORT_HEADERS", excessHeaders);
+        /*if(conn instanceof HttpInetConnection) {
+            HttpInetConnection netConn1 = (HttpInetConnection)conn;
+            InetAddress remoteAddress1 = netConn1.getRemoteAddress();
+            if(remoteAddress1 != null) {
+                msgContext.setProperty("REMOTE_ADDR", remoteAddress1.getHostAddress());
+                msgContext.setProperty("REMOTE_HOST", NhttpUtil.getHostName(remoteAddress1));
+            }
+        }
+*/
+        msgContext.setProperty("RequestResponseTransportControl", new HttpCoreRequestResponseTransport(msgContext));
+        return msgContext;
+    }
+
 }

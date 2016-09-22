@@ -11,5 +11,4 @@ public class InboundHttp2Constants {
     public static final String INBOUND_ENDPOINT_PARAMETER_DISPATCH_FILTER_PATTERN = "dispatch.filter.pattern";
     public static final String IS_SSL = "ssl";
     public static final String SOAP_ACTION="SOAPAction";
-
 }
