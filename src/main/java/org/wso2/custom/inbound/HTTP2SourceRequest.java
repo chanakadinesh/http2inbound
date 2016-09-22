@@ -14,6 +14,14 @@ import java.util.*;
 public class HTTP2SourceRequest {
     private Logger log = Logger.getLogger(HTTP2SourceRequest.class);
 
+    public int getStreamID() {
+        return streamID;
+    }
+
+    public void setStreamID(int streamID) {
+        this.streamID = streamID;
+    }
+
     private int streamID;
     private ChannelHandlerContext channel;
     private HashMap<Byte,Http2Frame> frames=new HashMap<Byte,Http2Frame>();

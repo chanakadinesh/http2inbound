@@ -6,6 +6,10 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import io.netty.handler.codec.http2.Http2DataFrame;
+import io.netty.handler.codec.http2.Http2FrameTypes;
+import io.netty.handler.codec.http2.Http2StreamFrame;
 import io.netty.util.CharsetUtil;
 import org.apache.axiom.om.OMElement;
 import org.apache.axis2.AxisFault;
@@ -18,6 +22,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.inbound.InboundEndpoint;
+import org.wso2.custom.inbound.HTTP2SourceRequest;
 import org.wso2.custom.inbound.InboundHttp2Configuration;
 import org.wso2.custom.inbound.InboundHttp2ResponseSender;
 import org.wso2.custom.inbound.common.InboundHttp2Constants;
@@ -26,6 +31,8 @@ import org.wso2.custom.inbound.common.SourceHandler;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
@@ -47,7 +54,7 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
     public InboundHttpSourceHandler(InboundHttp2Configuration config) {
         this.config=config;
         responseSender=new InboundHttp2ResponseSender(this);
-        messageHandler=new InboundMessageHandler(responseSender);
+        messageHandler=new InboundMessageHandler(responseSender,config);
     }
 
     @Override
@@ -56,38 +63,9 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         if (HttpUtil.is100ContinueExpected(req)) {
             channelCtx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE));
         }
-        this.keepAlive = HttpUtil.isKeepAlive(req);
-        String method = req != null ? req.method().toString() : "";
-        if(method.equalsIgnoreCase("POST")){
-            MessageContext synCtx = messageHandler.getSynapseMessageContext(InboundHttp2Constants.TENANT_DOMAIN);
-            InboundEndpoint endpoint = synCtx.getConfiguration().getInboundEndpoint(this.config.getName());
-
-            if (endpoint == null) {
-                log.error("Cannot find deployed inbound endpoint " + this.config.getName() + "for process request");
-                return;
-            }
-
-            org.apache.axis2.context.MessageContext axis2MsgCtx =
-                    ((org.apache.synapse.core.axis2.Axis2MessageContext) synCtx)
-                            .getAxis2MessageContext();
-
-            //Select the message builder
-
-            String contentType =req.headers().get(CONTENT_TYPE);
-            Builder builder = messageHandler.getMessageBuilder(contentType,axis2MsgCtx);
-
-            //Inject to the sequence
-            InputStream in = new AutoCloseInputStream(new ByteArrayInputStream(ByteBufUtil.getBytes(req.content())));
-            OMElement documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
-            synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
-            messageHandler.injectToSequence(synCtx, endpoint);
-        }
-     //   log.info("RequestHeaders : " + (Arrays.asList(req.headers().entries().toArray())));
-     //   log.info("RequestPayload : " + new String(ByteBufUtil.getBytes(req.content())));
+        HTTP2SourceRequest h2Request=wrapToHttp2SourceRequest(req);
+        messageHandler.processRequest(h2Request);
     }
-
-
-
     public void sendResponse(MessageContext msgCtx) {
 
         log.info("sendding http response");
@@ -111,4 +89,15 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         cause.printStackTrace();
         ctx.close();
     }
+
+    public HTTP2SourceRequest wrapToHttp2SourceRequest(FullHttpRequest req){
+        HTTP2SourceRequest http2Req=new HTTP2SourceRequest(1,channelCtx);
+        List<Map.Entry<String,String>> headers=req.headers().entries();
+        for (Map.Entry header:headers) {
+            http2Req.setHeader(header.getKey().toString(),header.getValue().toString());
+        }
+        http2Req.addFrame(Http2FrameTypes.DATA,new DefaultHttp2DataFrame(req.content()));
+        return http2Req;
+    }
+
 }
