@@ -161,20 +161,13 @@ public class InboundHttp2SourceHandler extends ChannelDuplexHandler implements S
         }
     }
 
-    //This method will be removed later
-    private void sendResponse(ChannelHandlerContext ctx, ByteBuf payload) {
-     //   System.out.println("sendRespond triggered");
-        // Send a frame for the response status
-        Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
-        ctx.write(new DefaultHttp2HeadersFrame(headers));
-        ctx.writeAndFlush(new DefaultHttp2DataFrame(payload, true));
-    }
-
-    public synchronized void sendResponse(MessageContext msgCtx) {
+    public synchronized void sendResponse(MessageContext msgCtx) throws AxisFault {
         ChannelHandlerContext channel=(ChannelHandlerContext) msgCtx.getProperty("stream-channel");
 
         ByteBuf content = channel.alloc().buffer();
-        content.writeBytes(msgCtx.getEnvelope().toString().getBytes());
+
+        String response=messageHandler.messageFormatter(((Axis2MessageContext)msgCtx).getAxis2MessageContext());
+        content.writeBytes(response.getBytes());
 
         // Send a frame for the response status
         Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());

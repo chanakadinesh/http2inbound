@@ -21,6 +21,7 @@ import org.apache.commons.io.input.AutoCloseInputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.inbound.InboundEndpoint;
 import org.wso2.custom.inbound.HTTP2SourceRequest;
 import org.wso2.custom.inbound.InboundHttp2Configuration;
@@ -66,11 +67,13 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         HTTP2SourceRequest h2Request=wrapToHttp2SourceRequest(req);
         messageHandler.processRequest(h2Request);
     }
-    public void sendResponse(MessageContext msgCtx) {
+    public void sendResponse(MessageContext msgCtx) throws AxisFault {
 
         log.info("sendding http response");
         ByteBuf content =  channelCtx.alloc().buffer();
-        content.writeBytes(msgCtx.getEnvelope().toString().getBytes());
+        String res=messageHandler.messageFormatter(((Axis2MessageContext)msgCtx).getAxis2MessageContext());
+        content.writeBytes(res.getBytes());
+       // content.writeBytes(msgCtx.getEnvelope().getBody().toString().getBytes());
 
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK, content);
         response.headers().add(CONTENT_TYPE,"text/xml");
@@ -96,7 +99,12 @@ public class InboundHttpSourceHandler extends SimpleChannelInboundHandler<FullHt
         for (Map.Entry header:headers) {
             http2Req.setHeader(header.getKey().toString(),header.getValue().toString());
         }
-        http2Req.addFrame(Http2FrameTypes.DATA,new DefaultHttp2DataFrame(req.content()));
+        http2Req.setUri(req.uri());
+        http2Req.setMethod(req.method().toString());
+        http2Req.setScheme(req.protocolVersion().protocolName());
+        if((req.method()!=HttpMethod.GET)&&(req.method()!=HttpMethod.DELETE)&&(req.method()!=HttpMethod.HEAD)){
+            http2Req.addFrame(Http2FrameTypes.DATA,new DefaultHttp2DataFrame(req.content()));
+        }
         return http2Req;
     }
 

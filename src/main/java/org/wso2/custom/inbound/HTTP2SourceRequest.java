@@ -13,15 +13,6 @@ import java.util.*;
  */
 public class HTTP2SourceRequest {
     private Logger log = Logger.getLogger(HTTP2SourceRequest.class);
-
-    public int getStreamID() {
-        return streamID;
-    }
-
-    public void setStreamID(int streamID) {
-        this.streamID = streamID;
-    }
-
     private int streamID;
     private ChannelHandlerContext channel;
     private HashMap<Byte,Http2Frame> frames=new HashMap<Byte,Http2Frame>();
@@ -30,6 +21,36 @@ public class HTTP2SourceRequest {
             return o1.compareToIgnoreCase(o2);
         }
     });
+    private String method=null;
+    private String uri=null;
+    private String scheme=null;
+
+    public void setUri(String uri) {
+        this.uri = uri;
+    }
+    public void setMethod(String method) {
+        this.method = method;
+    }
+    public void setScheme(String scheme) {
+        this.scheme = scheme.toLowerCase();
+    }
+    public String getScheme() {
+        if(scheme!=null){
+            return scheme;
+        }
+        else if(headers.containsKey("scheme")){
+            return headers.get("scheme");
+        }else{
+            return "http";
+        }
+    }
+
+    public void setStreamID(int streamID) {
+        this.streamID = streamID;
+    }
+    public int getStreamID() {
+        return streamID;
+    }
 
     public Map<String, String> getExcessHeaders() {
         return excessHeaders;
@@ -60,7 +81,10 @@ public class HTTP2SourceRequest {
     }
 
     public String getMethod(){
-        if(headers.containsKey("method")){
+        if(method!=null){
+            return method;
+        }
+        else if(headers.containsKey("method")){
             return headers.get("method");
         }else{
             return null;
@@ -73,8 +97,12 @@ public class HTTP2SourceRequest {
             return null;
         }
     }
+
     public String getUri(){
-        if(headers.containsKey("path")){
+        if(uri!=null){
+            return uri;
+        }
+        else if(headers.containsKey("path")){
             return "/"+headers.get("path");
         }else{
             return null;
